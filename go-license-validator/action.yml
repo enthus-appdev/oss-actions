@@ -1,0 +1,279 @@
+name: 'Go License Validator'
+description: 'Validate Go module licenses using CycloneDX SBOM generation and check against forbidden licenses'
+author: 'enthus-appdev'
+
+inputs:
+  forbidden_licenses:
+    description: 'Semicolon-separated list of forbidden license identifiers (e.g., "GPL-3.0;AGPL-3.0;SSPL-1.0")'
+    required: true
+  working_directory:
+    description: 'Working directory where go.mod is located'
+    required: false
+    default: '.'
+  output_file:
+    description: 'Output file for the generated SBOM'
+    required: false
+    default: 'sbom.json'
+  cyclonedx_version:
+    description: 'Version of cyclonedx-gomod to use'
+    required: false
+    default: 'v1'
+  fail_on_forbidden:
+    description: 'Whether to fail the action when forbidden licenses are found'
+    required: false
+    default: 'true'
+  include_dev_dependencies:
+    description: 'Include development dependencies in the scan'
+    required: false
+    default: 'false'
+
+outputs:
+  forbidden_found:
+    description: 'Whether forbidden licenses were found'
+    value: ${{ steps.check-forbidden.outputs.forbidden_found }}
+  licenses_found:
+    description: 'JSON array of all unique licenses found'
+    value: ${{ steps.extract-licenses.outputs.licenses_found }}
+  sbom_file:
+    description: 'Path to the generated SBOM file'
+    value: ${{ steps.validate-sbom.outputs.sbom_file }}
+  total_components:
+    description: 'Total number of components scanned'
+    value: ${{ steps.extract-licenses.outputs.total_components }}
+  components_with_licenses:
+    description: 'Number of components with license information'
+    value: ${{ steps.extract-licenses.outputs.components_with_licenses }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Generate SBOM with CycloneDX
+      id: generate
+      uses: CycloneDX/gh-gomod-generate-sbom@v2
+      with:
+        version: ${{ inputs.cyclonedx_version }}
+        args: mod -licenses -json -output ${{ inputs.output_file }} ${{ inputs.working_directory }}
+    
+    - name: Validate SBOM generation
+      id: validate-sbom
+      shell: bash
+      run: |
+        SBOM_FILE="${{ inputs.output_file }}"
+        echo "sbom_file=$SBOM_FILE" >> $GITHUB_OUTPUT
+        
+        # Check if SBOM file exists
+        if [[ ! -f "$SBOM_FILE" ]]; then
+          echo "❌ SBOM file not found: $SBOM_FILE"
+          echo "sbom_valid=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+        
+        # Validate JSON structure
+        if ! jq empty "$SBOM_FILE" 2>/dev/null; then
+          echo "❌ SBOM file is not valid JSON: $SBOM_FILE"
+          echo "sbom_valid=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+        
+        # Check for required CycloneDX structure
+        if ! jq -e '.bomFormat == "CycloneDX"' "$SBOM_FILE" >/dev/null 2>&1; then
+          echo "⚠️  Warning: SBOM may not be a valid CycloneDX format"
+        fi
+        
+        echo "✅ SBOM generated and validated successfully: $SBOM_FILE"
+        echo "sbom_valid=true" >> $GITHUB_OUTPUT
+    
+    - name: Extract license information
+      id: extract-licenses
+      shell: bash
+      run: |
+        SBOM_FILE="${{ inputs.output_file }}"
+        
+        # Extract component statistics
+        TOTAL_COMPONENTS=$(jq '.components | length' "$SBOM_FILE" 2>/dev/null || echo "0")
+        COMPONENTS_WITH_LICENSES=$(jq '[.components[]? | select(.evidence.licenses)] | length' "$SBOM_FILE" 2>/dev/null || echo "0")
+        
+        echo "total_components=$TOTAL_COMPONENTS" >> $GITHUB_OUTPUT
+        echo "components_with_licenses=$COMPONENTS_WITH_LICENSES" >> $GITHUB_OUTPUT
+        
+        # Extract all unique licenses as compact JSON array (single line)
+        LICENSES_FOUND=$(jq -c '[.components[]? | select(.evidence.licenses) | .evidence.licenses[]? | .license.id // .license.name // "Unknown"] | unique | sort' "$SBOM_FILE" 2>/dev/null || echo "[]")
+        echo "licenses_found=$LICENSES_FOUND" >> $GITHUB_OUTPUT
+        
+        echo "📊 Extracted license information:"
+        echo "  📦 Total components: $TOTAL_COMPONENTS"
+        echo "  📝 Components with licenses: $COMPONENTS_WITH_LICENSES"
+        echo "  🏷️  Unique licenses: $(echo "$LICENSES_FOUND" | jq length 2>/dev/null || echo "0")"
+    
+    - name: Check for forbidden licenses
+      id: check-forbidden
+      shell: bash
+      run: |
+        FORBIDDEN_LICENSES="${{ inputs.forbidden_licenses }}"
+        LICENSES_FOUND="${{ steps.extract-licenses.outputs.licenses_found }}"
+        
+        # Convert semicolon-separated forbidden licenses to array
+        IFS=';' read -ra FORBIDDEN_ARRAY <<< "$FORBIDDEN_LICENSES"
+        
+        # Check for forbidden licenses
+        FORBIDDEN_FOUND=false
+        FORBIDDEN_DETAILS=""
+        FORBIDDEN_LIST=""
+        
+        if [[ "$LICENSES_FOUND" != "[]" && "$LICENSES_FOUND" != "" ]]; then
+          for forbidden in "${FORBIDDEN_ARRAY[@]}"; do
+            forbidden=$(echo "$forbidden" | xargs) # Trim whitespace
+            if [[ -n "$forbidden" ]]; then
+              # Check if this forbidden license exists in our found licenses
+              if echo "$LICENSES_FOUND" | jq -e --arg license "$forbidden" 'index($license) != null' >/dev/null 2>&1; then
+                FORBIDDEN_FOUND=true
+                if [[ -n "$FORBIDDEN_DETAILS" ]]; then
+                  FORBIDDEN_DETAILS="$FORBIDDEN_DETAILS, $forbidden"
+                  FORBIDDEN_LIST="$FORBIDDEN_LIST;$forbidden"
+                else
+                  FORBIDDEN_DETAILS="$forbidden"
+                  FORBIDDEN_LIST="$forbidden"
+                fi
+              fi
+            fi
+          done
+        fi
+        
+        echo "forbidden_found=$FORBIDDEN_FOUND" >> $GITHUB_OUTPUT
+        echo "forbidden_details=$FORBIDDEN_DETAILS" >> $GITHUB_OUTPUT
+        echo "forbidden_list=$FORBIDDEN_LIST" >> $GITHUB_OUTPUT
+        
+        if [[ "$FORBIDDEN_FOUND" == "true" ]]; then
+          echo "⚠️  Forbidden licenses detected: $FORBIDDEN_DETAILS"
+        else
+          echo "✅ No forbidden licenses detected"
+        fi
+    
+    - name: Generate detailed report
+      id: generate-report
+      shell: bash
+      run: |
+        SBOM_FILE="${{ inputs.output_file }}"
+        TOTAL_COMPONENTS="${{ steps.extract-licenses.outputs.total_components }}"
+        COMPONENTS_WITH_LICENSES="${{ steps.extract-licenses.outputs.components_with_licenses }}"
+        LICENSES_FOUND="${{ steps.extract-licenses.outputs.licenses_found }}"
+        FORBIDDEN_FOUND="${{ steps.check-forbidden.outputs.forbidden_found }}"
+        FORBIDDEN_DETAILS="${{ steps.check-forbidden.outputs.forbidden_details }}"
+        FORBIDDEN_LIST="${{ steps.check-forbidden.outputs.forbidden_list }}"
+        
+        # Generate GitHub Step Summary Report
+        echo "# 🔍 Go License Validation Report" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Generated using CycloneDX SBOM from Go modules in \`${{ inputs.working_directory }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Summary statistics
+        echo "## 📊 Scan Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Total components**: $TOTAL_COMPONENTS" >> $GITHUB_STEP_SUMMARY
+        echo "- **Components with license info**: $COMPONENTS_WITH_LICENSES" >> $GITHUB_STEP_SUMMARY
+        echo "- **Unique licenses found**: $(echo "$LICENSES_FOUND" | jq length 2>/dev/null || echo "0")" >> $GITHUB_STEP_SUMMARY
+        echo "- **Forbidden licenses detected**: $(if [[ "$FORBIDDEN_FOUND" == "true" ]]; then echo "⚠️ YES"; else echo "✅ NO"; fi)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Forbidden license check results
+        if [[ "$FORBIDDEN_FOUND" == "true" ]]; then
+          echo "## ⚠️ Forbidden Licenses Detected" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The following forbidden licenses were found: **$FORBIDDEN_DETAILS**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Components using forbidden licenses:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Forbidden License |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|-------------------|" >> $GITHUB_STEP_SUMMARY
+          
+          # Convert forbidden list back to array for processing
+          IFS=';' read -ra FORBIDDEN_ARRAY <<< "$FORBIDDEN_LIST"
+          for forbidden in "${FORBIDDEN_ARRAY[@]}"; do
+            forbidden=$(echo "$forbidden" | xargs)
+            if [[ -n "$forbidden" ]]; then
+              jq -r --arg license "$forbidden" '.components[]? | select(.evidence.licenses) | select(.evidence.licenses[]? | .license.id == $license or .license.name == $license) | "| " + .name + " | " + $license + " |"' "$SBOM_FILE" >> $GITHUB_STEP_SUMMARY 2>/dev/null || true
+            fi
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "## ✅ License Validation Passed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "No forbidden licenses were detected in the scanned components." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # All licenses found
+        echo "## 📋 All Licenses Found" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [[ "$COMPONENTS_WITH_LICENSES" -gt 0 ]]; then
+          echo "| License | Component Count |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-----------------|" >> $GITHUB_STEP_SUMMARY
+          
+          # Calculate license counts directly from SBOM
+          jq -r '.components[]? | select(.evidence.licenses) | .evidence.licenses[]? | .license.id // .license.name // "Unknown"' "$SBOM_FILE" 2>/dev/null | sort | uniq -c | sort -rn | while read count license; do
+            if [[ -n "$license" && -n "$count" ]]; then
+              echo "| $license | $count |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Detailed Component License Information" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | License |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|---------|" >> $GITHUB_STEP_SUMMARY
+          
+          jq -r '.components[]? | select(.evidence.licenses) | "| " + .name + " | " + (.evidence.licenses[0].license.name // .evidence.licenses[0].license.id // "Unknown") + " |"' "$SBOM_FILE" 2>/dev/null >> $GITHUB_STEP_SUMMARY || echo "| No detailed license information available | N/A |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "No license information found in the scanned components." >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "---" >> $GITHUB_STEP_SUMMARY
+        echo "*Generated on $(date -u '+%Y-%m-%d %H:%M:%S UTC') using [CycloneDX SBOM](https://cyclonedx.org/)*" >> $GITHUB_STEP_SUMMARY
+        
+        echo "📋 Detailed report generated in GitHub Step Summary"
+    
+    - name: Output results and handle status
+      id: final-status
+      shell: bash
+      run: |
+        SBOM_FILE="${{ inputs.output_file }}"
+        TOTAL_COMPONENTS="${{ steps.extract-licenses.outputs.total_components }}"
+        COMPONENTS_WITH_LICENSES="${{ steps.extract-licenses.outputs.components_with_licenses }}"
+        FORBIDDEN_FOUND="${{ steps.check-forbidden.outputs.forbidden_found }}"
+        FORBIDDEN_DETAILS="${{ steps.check-forbidden.outputs.forbidden_details }}"
+        FAIL_ON_FORBIDDEN="${{ inputs.fail_on_forbidden }}"
+        
+        # Output final results to console
+        echo ""
+        echo "🔍 License validation completed:"
+        echo "  📁 Working directory: ${{ inputs.working_directory }}"
+        echo "  📄 SBOM file: $SBOM_FILE"
+        echo "  📊 Total components: $TOTAL_COMPONENTS"
+        echo "  📝 Components with licenses: $COMPONENTS_WITH_LICENSES"
+        echo "  🚫 Forbidden licenses found: $FORBIDDEN_FOUND"
+        
+        if [[ "$FORBIDDEN_FOUND" == "true" ]]; then
+          echo "  ⚠️  Forbidden licenses: $FORBIDDEN_DETAILS"
+        fi
+        
+        # Handle final status and exit codes
+        if [[ "$FORBIDDEN_FOUND" == "true" && "$FAIL_ON_FORBIDDEN" == "true" ]]; then
+          echo ""
+          echo "❌ License validation failed: Forbidden licenses detected"
+          echo "   Forbidden licenses found: $FORBIDDEN_DETAILS"
+          echo "   To see detailed information, check the GitHub Step Summary."
+          exit 1
+        elif [[ "$FORBIDDEN_FOUND" == "true" ]]; then
+          echo ""
+          echo "⚠️  Warning: Forbidden licenses detected but fail_on_forbidden is set to false"
+        else
+          echo ""
+          echo "✅ License validation passed: No forbidden licenses detected"
+        fi
+
+branding:
+  icon: 'shield'
+  color: 'green'
