@@ -49,7 +49,7 @@ The action runs through multiple focused steps:
 ### Basic License Validation
 
 ```yaml
-- uses: enthus-appdev/oss-actions/npm-license-validator@main
+- uses: enthus-appdev/oss-actions/npm-license-validator@v1
   with:
     forbidden_licenses: "GPL-3.0;AGPL-3.0;SSPL-1.0"
 ```
@@ -57,7 +57,7 @@ The action runs through multiple focused steps:
 ### Custom Working Directory (monorepo)
 
 ```yaml
-- uses: enthus-appdev/oss-actions/npm-license-validator@main
+- uses: enthus-appdev/oss-actions/npm-license-validator@v1
   with:
     forbidden_licenses: "GPL-3.0;AGPL-3.0;LGPL-3.0"
     working_directory: "./frontend"
@@ -67,7 +67,7 @@ The action runs through multiple focused steps:
 ### Warning Mode (Don't Fail)
 
 ```yaml
-- uses: enthus-appdev/oss-actions/npm-license-validator@main
+- uses: enthus-appdev/oss-actions/npm-license-validator@v1
   with:
     forbidden_licenses: "GPL-3.0;AGPL-3.0"
     fail_on_forbidden: false
@@ -76,7 +76,7 @@ The action runs through multiple focused steps:
 ### Including Dev Dependencies
 
 ```yaml
-- uses: enthus-appdev/oss-actions/npm-license-validator@main
+- uses: enthus-appdev/oss-actions/npm-license-validator@v1
   with:
     forbidden_licenses: "GPL-3.0;AGPL-3.0;SSPL-1.0"
     include_dev_dependencies: true
@@ -112,7 +112,7 @@ jobs:
 
       - name: Run license check
         if: steps.license-cache.outputs.cache-hit != 'true'
-        uses: enthus-appdev/oss-actions/npm-license-validator@main
+        uses: enthus-appdev/oss-actions/npm-license-validator@v1
         with:
           forbidden_licenses: ${{ vars.FORBIDDEN_LICENSES }}
 
