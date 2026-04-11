@@ -57,8 +57,10 @@ runs:
     - name: Validate SBOM generation
       id: validate-sbom
       shell: bash
+      env:
+        OUTPUT_FILE: ${{ inputs.output_file }}
       run: |
-        SBOM_FILE="${{ inputs.output_file }}"
+        SBOM_FILE="$OUTPUT_FILE"
         echo "sbom_file=$SBOM_FILE" >> "$GITHUB_OUTPUT"
         
         # Check if SBOM file exists
@@ -86,8 +88,10 @@ runs:
     - name: Extract license information
       id: extract-licenses
       shell: bash
+      env:
+        OUTPUT_FILE: ${{ inputs.output_file }}
       run: |
-        SBOM_FILE="${{ inputs.output_file }}"
+        SBOM_FILE="$OUTPUT_FILE"
         
         # Extract component statistics
         TOTAL_COMPONENTS=$(jq '.components | length' "$SBOM_FILE" 2>/dev/null || echo "0")
@@ -108,10 +112,10 @@ runs:
     - name: Check for forbidden licenses
       id: check-forbidden
       shell: bash
+      env:
+        FORBIDDEN_LICENSES: ${{ inputs.forbidden_licenses }}
+        LICENSES_FOUND: ${{ steps.extract-licenses.outputs.licenses_found }}
       run: |
-        FORBIDDEN_LICENSES="${{ inputs.forbidden_licenses }}"
-        LICENSES_FOUND="${{ steps.extract-licenses.outputs.licenses_found }}"
-        
         # Convert semicolon-separated forbidden licenses to array
         IFS=';' read -ra FORBIDDEN_ARRAY <<< "$FORBIDDEN_LICENSES"
         
@@ -152,19 +156,20 @@ runs:
     - name: Generate detailed report
       id: generate-report
       shell: bash
+      env:
+        SBOM_FILE: ${{ inputs.output_file }}
+        WORKING_DIRECTORY: ${{ inputs.working_directory }}
+        TOTAL_COMPONENTS: ${{ steps.extract-licenses.outputs.total_components }}
+        COMPONENTS_WITH_LICENSES: ${{ steps.extract-licenses.outputs.components_with_licenses }}
+        LICENSES_FOUND: ${{ steps.extract-licenses.outputs.licenses_found }}
+        FORBIDDEN_FOUND: ${{ steps.check-forbidden.outputs.forbidden_found }}
+        FORBIDDEN_DETAILS: ${{ steps.check-forbidden.outputs.forbidden_details }}
+        FORBIDDEN_LIST: ${{ steps.check-forbidden.outputs.forbidden_list }}
       run: |
-        SBOM_FILE="${{ inputs.output_file }}"
-        TOTAL_COMPONENTS="${{ steps.extract-licenses.outputs.total_components }}"
-        COMPONENTS_WITH_LICENSES="${{ steps.extract-licenses.outputs.components_with_licenses }}"
-        LICENSES_FOUND="${{ steps.extract-licenses.outputs.licenses_found }}"
-        FORBIDDEN_FOUND="${{ steps.check-forbidden.outputs.forbidden_found }}"
-        FORBIDDEN_DETAILS="${{ steps.check-forbidden.outputs.forbidden_details }}"
-        FORBIDDEN_LIST="${{ steps.check-forbidden.outputs.forbidden_list }}"
-        
         # Generate GitHub Step Summary Report
         echo "# 🔍 Go License Validation Report" >> "$GITHUB_STEP_SUMMARY"
         echo "" >> "$GITHUB_STEP_SUMMARY"
-        echo "Generated using CycloneDX SBOM from Go modules in \`${{ inputs.working_directory }}\`" >> "$GITHUB_STEP_SUMMARY"
+        echo "Generated using CycloneDX SBOM from Go modules in \`$WORKING_DIRECTORY\`" >> "$GITHUB_STEP_SUMMARY"
         echo "" >> "$GITHUB_STEP_SUMMARY"
         
         # Summary statistics
@@ -238,18 +243,19 @@ runs:
     - name: Output results and handle status
       id: final-status
       shell: bash
+      env:
+        SBOM_FILE: ${{ inputs.output_file }}
+        WORKING_DIRECTORY: ${{ inputs.working_directory }}
+        TOTAL_COMPONENTS: ${{ steps.extract-licenses.outputs.total_components }}
+        COMPONENTS_WITH_LICENSES: ${{ steps.extract-licenses.outputs.components_with_licenses }}
+        FORBIDDEN_FOUND: ${{ steps.check-forbidden.outputs.forbidden_found }}
+        FORBIDDEN_DETAILS: ${{ steps.check-forbidden.outputs.forbidden_details }}
+        FAIL_ON_FORBIDDEN: ${{ inputs.fail_on_forbidden }}
       run: |
-        SBOM_FILE="${{ inputs.output_file }}"
-        TOTAL_COMPONENTS="${{ steps.extract-licenses.outputs.total_components }}"
-        COMPONENTS_WITH_LICENSES="${{ steps.extract-licenses.outputs.components_with_licenses }}"
-        FORBIDDEN_FOUND="${{ steps.check-forbidden.outputs.forbidden_found }}"
-        FORBIDDEN_DETAILS="${{ steps.check-forbidden.outputs.forbidden_details }}"
-        FAIL_ON_FORBIDDEN="${{ inputs.fail_on_forbidden }}"
-        
         # Output final results to console
         echo ""
         echo "🔍 License validation completed:"
-        echo "  📁 Working directory: ${{ inputs.working_directory }}"
+        echo "  📁 Working directory: $WORKING_DIRECTORY"
         echo "  📄 SBOM file: $SBOM_FILE"
         echo "  📊 Total components: $TOTAL_COMPONENTS"
         echo "  📝 Components with licenses: $COMPONENTS_WITH_LICENSES"
