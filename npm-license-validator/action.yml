@@ -56,16 +56,16 @@ runs:
         CYCLONEDX_NPM_VERSION: ${{ inputs.cyclonedx_npm_version }}
         OUTPUT_FILE: ${{ inputs.output_file }}
       run: |
-        OMIT_FLAG=""
+        OMIT_ARGS=()
         if [[ "$INCLUDE_DEV_DEPENDENCIES" != "true" ]]; then
-          OMIT_FLAG="--omit dev"
+          OMIT_ARGS=(--omit dev)
         fi
         npx --yes "@cyclonedx/cyclonedx-npm@$CYCLONEDX_NPM_VERSION" \
           --package-lock-only \
           --ignore-npm-errors \
           --output-format JSON \
           --output-file "$OUTPUT_FILE" \
-          ${OMIT_FLAG}
+          "${OMIT_ARGS[@]}"
 
     - name: Validate SBOM generation
       id: validate-sbom
@@ -75,7 +75,7 @@ runs:
         OUTPUT_FILE: ${{ inputs.output_file }}
       run: |
         SBOM_FILE="$WORKING_DIRECTORY/$OUTPUT_FILE"
-        echo "sbom_file=$SBOM_FILE" >> $GITHUB_OUTPUT
+        echo "sbom_file=$SBOM_FILE" >> "$GITHUB_OUTPUT"
 
         if [[ ! -f "$SBOM_FILE" ]]; then
           echo "❌ SBOM file not found: $SBOM_FILE"
@@ -104,11 +104,11 @@ runs:
         # npm CycloneDX puts licenses at .licenses[]; fall back to .evidence.licenses[] for robustness
         COMPONENTS_WITH_LICENSES=$(jq '[.components[]? | select((.licenses // .evidence.licenses // []) | length > 0)] | length' "$SBOM_FILE" 2>/dev/null || echo "0")
 
-        echo "total_components=$TOTAL_COMPONENTS" >> $GITHUB_OUTPUT
-        echo "components_with_licenses=$COMPONENTS_WITH_LICENSES" >> $GITHUB_OUTPUT
+        echo "total_components=$TOTAL_COMPONENTS" >> "$GITHUB_OUTPUT"
+        echo "components_with_licenses=$COMPONENTS_WITH_LICENSES" >> "$GITHUB_OUTPUT"
 
         LICENSES_FOUND=$(jq -c '[.components[]? | (.licenses // .evidence.licenses // [])[]? | .license.id // .license.name // "Unknown"] | unique | sort' "$SBOM_FILE" 2>/dev/null || echo "[]")
-        echo "licenses_found=$LICENSES_FOUND" >> $GITHUB_OUTPUT
+        echo "licenses_found=$LICENSES_FOUND" >> "$GITHUB_OUTPUT"
 
         echo "📊 Extracted license information:"
         echo "  📦 Total components: $TOTAL_COMPONENTS"
@@ -146,9 +146,9 @@ runs:
           done
         fi
 
-        echo "forbidden_found=$FORBIDDEN_FOUND" >> $GITHUB_OUTPUT
-        echo "forbidden_details=$FORBIDDEN_DETAILS" >> $GITHUB_OUTPUT
-        echo "forbidden_list=$FORBIDDEN_LIST" >> $GITHUB_OUTPUT
+        echo "forbidden_found=$FORBIDDEN_FOUND" >> "$GITHUB_OUTPUT"
+        echo "forbidden_details=$FORBIDDEN_DETAILS" >> "$GITHUB_OUTPUT"
+        echo "forbidden_list=$FORBIDDEN_LIST" >> "$GITHUB_OUTPUT"
 
         if [[ "$FORBIDDEN_FOUND" == "true" ]]; then
           echo "⚠️  Forbidden licenses detected: $FORBIDDEN_DETAILS"
@@ -169,28 +169,28 @@ runs:
         FORBIDDEN_LIST: ${{ steps.check-forbidden.outputs.forbidden_list }}
         WORKING_DIRECTORY: ${{ inputs.working_directory }}
       run: |
-        echo "# 🔍 npm License Validation Report" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "Generated using CycloneDX SBOM from npm packages in \`$WORKING_DIRECTORY\`" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "# 🔍 npm License Validation Report" >> "$GITHUB_STEP_SUMMARY"
+        echo "" >> "$GITHUB_STEP_SUMMARY"
+        echo "Generated using CycloneDX SBOM from npm packages in \`$WORKING_DIRECTORY\`" >> "$GITHUB_STEP_SUMMARY"
+        echo "" >> "$GITHUB_STEP_SUMMARY"
 
-        echo "## 📊 Scan Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "- **Total components**: $TOTAL_COMPONENTS" >> $GITHUB_STEP_SUMMARY
-        echo "- **Components with license info**: $COMPONENTS_WITH_LICENSES" >> $GITHUB_STEP_SUMMARY
-        echo "- **Unique licenses found**: $(echo "$LICENSES_FOUND" | jq length 2>/dev/null || echo "0")" >> $GITHUB_STEP_SUMMARY
-        echo "- **Forbidden licenses detected**: $(if [[ "$FORBIDDEN_FOUND" == "true" ]]; then echo "⚠️ YES"; else echo "✅ NO"; fi)" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 📊 Scan Summary" >> "$GITHUB_STEP_SUMMARY"
+        echo "" >> "$GITHUB_STEP_SUMMARY"
+        echo "- **Total components**: $TOTAL_COMPONENTS" >> "$GITHUB_STEP_SUMMARY"
+        echo "- **Components with license info**: $COMPONENTS_WITH_LICENSES" >> "$GITHUB_STEP_SUMMARY"
+        echo "- **Unique licenses found**: $(echo "$LICENSES_FOUND" | jq length 2>/dev/null || echo "0")" >> "$GITHUB_STEP_SUMMARY"
+        echo "- **Forbidden licenses detected**: $(if [[ "$FORBIDDEN_FOUND" == "true" ]]; then echo "⚠️ YES"; else echo "✅ NO"; fi)" >> "$GITHUB_STEP_SUMMARY"
+        echo "" >> "$GITHUB_STEP_SUMMARY"
 
         if [[ "$FORBIDDEN_FOUND" == "true" ]]; then
-          echo "## ⚠️ Forbidden Licenses Detected" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "The following forbidden licenses were found: **$FORBIDDEN_DETAILS**" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Components using forbidden licenses:" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Component | Forbidden License |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----------|-------------------|" >> $GITHUB_STEP_SUMMARY
+          echo "## ⚠️ Forbidden Licenses Detected" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "The following forbidden licenses were found: **$FORBIDDEN_DETAILS**" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Components using forbidden licenses:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Component | Forbidden License |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----------|-------------------|" >> "$GITHUB_STEP_SUMMARY"
 
           IFS=';' read -ra FORBIDDEN_ARRAY <<< "$FORBIDDEN_LIST"
           for forbidden in "${FORBIDDEN_ARRAY[@]}"; do
@@ -198,46 +198,46 @@ runs:
             if [[ -n "$forbidden" ]]; then
               jq -r --arg license "$forbidden" \
                 '.components[]? | select((.licenses // .evidence.licenses // [])[]? | .license.id == $license or .license.name == $license) | "| " + .name + " | " + $license + " |"' \
-                "$SBOM_FILE" >> $GITHUB_STEP_SUMMARY 2>/dev/null || true
+                "$SBOM_FILE" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
             fi
           done
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "" >> "$GITHUB_STEP_SUMMARY"
         else
-          echo "## ✅ License Validation Passed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "No forbidden licenses were detected in the scanned components." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## ✅ License Validation Passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "No forbidden licenses were detected in the scanned components." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
         fi
 
-        echo "## 📋 All Licenses Found" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 📋 All Licenses Found" >> "$GITHUB_STEP_SUMMARY"
+        echo "" >> "$GITHUB_STEP_SUMMARY"
 
         if [[ "$COMPONENTS_WITH_LICENSES" -gt 0 ]]; then
-          echo "| License | Component Count |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------|-----------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| License | Component Count |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---------|-----------------|" >> "$GITHUB_STEP_SUMMARY"
 
           jq -r '.components[]? | (.licenses // .evidence.licenses // [])[]? | .license.id // .license.name // "Unknown"' \
-            "$SBOM_FILE" 2>/dev/null | sort | uniq -c | sort -rn | while read count license; do
+            "$SBOM_FILE" 2>/dev/null | sort | uniq -c | sort -rn | while read -r count license; do
             if [[ -n "$license" && -n "$count" ]]; then
-              echo "| $license | $count |" >> $GITHUB_STEP_SUMMARY
+              echo "| $license | $count |" >> "$GITHUB_STEP_SUMMARY"
             fi
           done
 
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Detailed Component License Information" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Component | License |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----------|---------|" >> $GITHUB_STEP_SUMMARY
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Detailed Component License Information" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Component | License |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----------|---------|" >> "$GITHUB_STEP_SUMMARY"
 
           jq -r '.components[]? | select((.licenses // .evidence.licenses // []) | length > 0) | "| " + .name + " | " + ((.licenses // .evidence.licenses // [])[0].license.name // (.licenses // .evidence.licenses // [])[0].license.id // "Unknown") + " |"' \
-            "$SBOM_FILE" 2>/dev/null >> $GITHUB_STEP_SUMMARY || echo "| No detailed license information available | N/A |" >> $GITHUB_STEP_SUMMARY
+            "$SBOM_FILE" 2>/dev/null >> "$GITHUB_STEP_SUMMARY" || echo "| No detailed license information available | N/A |" >> "$GITHUB_STEP_SUMMARY"
         else
-          echo "No license information found in the scanned components." >> $GITHUB_STEP_SUMMARY
+          echo "No license information found in the scanned components." >> "$GITHUB_STEP_SUMMARY"
         fi
 
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "---" >> $GITHUB_STEP_SUMMARY
-        echo "*Generated on $(date -u '+%Y-%m-%d %H:%M:%S UTC') using [CycloneDX for Node.js](https://github.com/CycloneDX/cyclonedx-node-npm)*" >> $GITHUB_STEP_SUMMARY
+        echo "" >> "$GITHUB_STEP_SUMMARY"
+        echo "---" >> "$GITHUB_STEP_SUMMARY"
+        echo "*Generated on $(date -u '+%Y-%m-%d %H:%M:%S UTC') using [CycloneDX for Node.js](https://github.com/CycloneDX/cyclonedx-node-npm)*" >> "$GITHUB_STEP_SUMMARY"
 
         echo "📋 Detailed report generated in GitHub Step Summary"
 
