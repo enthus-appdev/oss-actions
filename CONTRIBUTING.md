@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: <your-fork>/oss-actions/npm-license-validator@<your-branch>
+      - uses: <your-username>/oss-actions/npm-license-validator@<your-branch>
         with:
           forbidden_licenses: 'GPL-3.0;AGPL-3.0'
 ```
@@ -33,7 +33,7 @@ Please verify:
 
 - The action runs end-to-end against a real project in the relevant language.
 - Forbidden-license detection still fails the build when it should.
-- No new warnings from `actionlint` / `shellcheck` (CI runs `actionlint` on every PR).
+- No new warnings from `actionlint` / `shellcheck`.
 
 ## Pull request expectations
 
