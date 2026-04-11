@@ -49,7 +49,7 @@ runs:
   steps:
     - name: Generate SBOM with CycloneDX
       id: generate
-      uses: CycloneDX/gh-gomod-generate-sbom@v2
+      uses: CycloneDX/gh-gomod-generate-sbom@efc74245d6802c8cefd925620515442756c70d8f # v2.0.0
       with:
         version: ${{ inputs.cyclonedx_version }}
         args: mod -licenses -json -output ${{ inputs.output_file }} ${{ inputs.working_directory }}
