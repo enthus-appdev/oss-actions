@@ -1,0 +1,62 @@
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  schema:
+    name: action.yml schema
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install action-validator
+        run: npm install -g @action-validator/core @action-validator/cli
+
+      - name: Validate composite actions
+        run: |
+          action-validator npm-license-validator/action.yml
+          action-validator go-license-validator/action.yml
+
+  shell:
+    name: shellcheck run blocks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Shellcheck composite action run blocks
+        run: |
+          python3 .github/scripts/shellcheck-action.py \
+            --severity=info \
+            npm-license-validator/action.yml \
+            go-license-validator/action.yml
+
+  workflow:
+    name: actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install actionlint
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
+      - name: Run actionlint
+        run: |
+          "$(go env GOPATH)/bin/actionlint" -color
