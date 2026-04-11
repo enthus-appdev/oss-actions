@@ -34,19 +34,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install PyYAML
-        run: pip install pyyaml
-
       - name: Shellcheck composite action run blocks
         run: |
-          python3 .github/scripts/shellcheck-action.py \
-            --severity=info \
-            npm-license-validator/action.yml \
-            go-license-validator/action.yml
+          severity=info
+          failed=0
+          for file in npm-license-validator/action.yml go-license-validator/action.yml; do
+            count=$(yq '.runs.steps | length' "$file")
+            file_failed=0
+            for ((i = 0; i < count; i++)); do
+              run=$(yq ".runs.steps[$i].run // \"\"" "$file")
+              [[ -z "$run" ]] && continue
+              shell=$(yq ".runs.steps[$i].shell // \"bash\"" "$file")
+              name=$(yq ".runs.steps[$i].name // \"step-$i\"" "$file")
+              tmp=$(mktemp --suffix=.sh)
+              {
+                printf '#!/usr/bin/env bash\n'
+                printf 'set -euo pipefail\n'
+                printf '%s\n' "$run"
+              } > "$tmp"
+              if ! out=$(shellcheck "--shell=$shell" "--severity=$severity" --color=never "$tmp" 2>&1); then
+                file_failed=$((file_failed + 1))
+                label="$file:$name"
+                printf '\n::group::%s\n%s\n::endgroup::\n' "$label" "${out//$tmp/$label}"
+              fi
+              rm -f "$tmp"
+            done
+            printf '%s: %d run block(s) failing\n' "$file" "$file_failed"
+            failed=$((failed + file_failed))
+          done
+          [[ "$failed" -eq 0 ]]
 
   workflow:
     name: actionlint
