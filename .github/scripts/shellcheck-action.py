@@ -32,7 +32,7 @@ def _sanitize(shell: str) -> str:
     doesn't blow up on legacy code.
     """
     return _EXPR_RE.sub(
-        lambda m: f"$_GH_{re.sub(r'\\W', '_', m.group(1))}",
+        lambda m: f"$_GH_{re.sub(r'\W', '_', m.group(1))}",
         shell,
     )
 
@@ -90,7 +90,7 @@ def _lint_file(path: pathlib.Path, severity: str) -> int:
             failing += 1
             label = f"{path}:{name}"
             print(f"\n=== {label} ===")
-            print(result.stdout.replace(tmp_path, label))
+            print((result.stdout + result.stderr).replace(tmp_path, label))
 
     print(f"{path}: {checked} run: block(s) checked, {failing} failing")
     return failing
