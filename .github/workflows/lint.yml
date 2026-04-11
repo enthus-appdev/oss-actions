@@ -76,12 +76,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install actionlint
-        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-
       - name: Run actionlint
-        run: |
-          "$(go env GOPATH)/bin/actionlint" -color
+        uses: raven-actions/actionlint@205b530c5d9fa8f44ae9ed59f341a0db994aa6f8 # v2.1.2
 
   security:
     name: zizmor
