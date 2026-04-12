@@ -2,7 +2,7 @@
 # https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
 #
 # Automates GitHub Actions `uses:` reference bumps across the lint workflow
-# and both composite action.yml files. Dependabot keeps SHA pins in sync
+# and the go-license-validator composite action. Dependabot keeps SHA pins in sync
 # with the trailing `# v1.2.3` comment, so SHA-pinning stays safe without
 # going stale.
 #
@@ -31,25 +31,8 @@ updates:
     cooldown:
       default-days: 7
 
-  # npm-license-validator composite action
-  - package-ecosystem: "github-actions"
-    directory: "/npm-license-validator"
-    schedule:
-      interval: "weekly"
-    groups:
-      actions:
-        patterns:
-          - "*"
-    labels:
-      - "dependencies"
-      - "github-actions"
-    commit-message:
-      prefix: "ci"
-      include: "scope"
-    cooldown:
-      default-days: 7
-
-  # go-license-validator composite action
+  # go-license-validator composite action (npm-license-validator has no
+  # `uses:` references, so there is nothing for Dependabot to track there)
   - package-ecosystem: "github-actions"
     directory: "/go-license-validator"
     schedule:
