@@ -1,17 +1,51 @@
+# Dependabot configuration
+# https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
+#
+# Automates GitHub Actions `uses:` reference bumps across the lint workflow
+# and the go-license-validator composite action. Dependabot keeps SHA pins in sync
+# with the trailing `# v1.2.3` comment, so SHA-pinning stays safe without
+# going stale.
+#
+# Not covered — these still need manual bumps:
+#   - actionlint version in the `go install` command in lint.yml
+#   - action-validator via `npm install -g` (implicit "latest")
+#   - cyclonedx-npm / cyclonedx-gomod versions in action input defaults
+#     (consumers can override these, so freshness is less urgent)
 version: 2
 updates:
-  - package-ecosystem: github-actions
-    directory: /
+  # Workflow files under .github/workflows/
+  - package-ecosystem: "github-actions"
+    directory: "/"
     schedule:
-      interval: daily
-      time: "04:00"
-    labels:
-      - dependencies
-      - github-actions
+      interval: "weekly"
     groups:
       actions:
         patterns:
-          - '*'
+          - "*"
+    labels:
+      - "dependencies"
+      - "github-actions"
     commit-message:
-      prefix: ci
-      include: scope
+      prefix: "ci"
+      include: "scope"
+    cooldown:
+      default-days: 7
+
+  # go-license-validator composite action (npm-license-validator has no
+  # `uses:` references, so there is nothing for Dependabot to track there)
+  - package-ecosystem: "github-actions"
+    directory: "/go-license-validator"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns:
+          - "*"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    cooldown:
+      default-days: 7
