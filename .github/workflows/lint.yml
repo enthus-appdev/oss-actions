@@ -23,7 +23,7 @@ jobs:
           persist-credentials: false
 
       - name: Install action-validator
-        run: npm install -g @action-validator/core @action-validator/cli
+        run: npm install -g @action-validator/core @action-validator/cli # zizmor: ignore[adhoc-packages]
 
       - name: Validate composite actions
         run: |
