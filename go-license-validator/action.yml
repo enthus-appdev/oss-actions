@@ -47,6 +47,15 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # The SBOM step below shells out to the go toolchain. GitHub-hosted
+    # runners preinstall Go, but minimal self-hosted images do not, so the
+    # action provisions its own toolchain from the module's go.mod.
+    - name: Set up Go
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version-file: ${{ inputs.working_directory }}/go.mod
+        cache: false
+
     - name: Generate SBOM with CycloneDX
       id: generate
       uses: CycloneDX/gh-gomod-generate-sbom@efc74245d6802c8cefd925620515442756c70d8f # v2.0.0

@@ -362,7 +362,7 @@ The action is designed with a modular pipeline architecture that provides:
 ## Dependencies
 
 Requires:
-- Go runtime (setup-go action recommended)
+- Go toolchain (provisioned automatically via setup-go from the module's go.mod)
 - CycloneDX SBOM generation tools (automatically installed)
 - jq for JSON processing (available in GitHub runners)
 
