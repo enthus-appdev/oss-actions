@@ -34,6 +34,24 @@ The action runs through multiple focused steps:
 | `fail_on_forbidden` | Whether to fail the action when forbidden licenses are found | No | `true` |
 | `include_dev_dependencies` | Include development dependencies in the scan | No | `false` |
 
+
+### How `forbidden_licenses` is matched
+
+Each entry names a **license family**, matched case-insensitively against every
+identifier in a dependency's SPDX expression:
+
+- `GPL` matches `GPL-3.0-only`, `GPL-2.0-or-later`, `GPL-3.0` — an entry matches
+  an identifier that equals it, or that continues it after `-`, `.` or `+`.
+- `GPL` does **not** match `LGPL-3.0` or `AGPL-3.0`. Those are different
+  licenses that merely contain the same letters; list them separately if you
+  want them blocked (`GPL;LGPL;AGPL`).
+- Composite expressions are split on `AND` / `OR` / `WITH` and parentheses, so
+  `Apache-2.0 AND GPL-2.0` is caught by `GPL`, as is
+  `GPL-2.0-or-later WITH GCC-exception-3.1`.
+
+An entry naming a full identifier (`GPL-3.0`) still works, and also matches the
+modern `-only` / `-or-later` spellings that identifier predates.
+
 ## Outputs
 
 | Output | Description |
