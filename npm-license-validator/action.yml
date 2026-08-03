@@ -132,7 +132,28 @@ runs:
           for forbidden in "${FORBIDDEN_ARRAY[@]}"; do
             forbidden=$(echo "$forbidden" | xargs)
             if [[ -n "$forbidden" ]]; then
-              if echo "$LICENSES_FOUND" | jq -e --arg license "$forbidden" 'index($license) != null' >/dev/null 2>&1; then
+              # A found value is an SPDX *expression*, not a bare identifier:
+              # it may combine identifiers with AND / OR / WITH and parens, so
+              # it is split into identifiers before matching. A forbidden entry
+              # names a family — "GPL" must catch "GPL-3.0-only" while leaving
+              # "LGPL-3.0" and "AGPL-3.0" alone, since those are different
+              # licenses that merely contain the same letters. Hence equality
+              # or the entry followed by an SPDX separator, never a bare
+              # substring. (Add "LGPL" explicitly if you want it blocked.)
+              if echo "$LICENSES_FOUND" | jq -e --arg forbidden "$forbidden" '
+                def identifiers:
+                  [ splits("[[:space:]()]+") ]
+                  | map(select(. != ""))
+                  | map(select(ascii_downcase as $t | ["and", "or", "with"] | index($t) | not));
+                def blocked($entry):
+                  (ascii_downcase) as $l
+                  | ($entry | ascii_downcase) as $f
+                  | $l == $f
+                    or ($l | startswith($f + "-"))
+                    or ($l | startswith($f + "."))
+                    or ($l | startswith($f + "+"));
+                any(.[]; identifiers | any(blocked($forbidden)))
+              ' >/dev/null 2>&1; then
                 FORBIDDEN_FOUND=true
                 if [[ -n "$FORBIDDEN_DETAILS" ]]; then
                   FORBIDDEN_DETAILS="$FORBIDDEN_DETAILS, $forbidden"
